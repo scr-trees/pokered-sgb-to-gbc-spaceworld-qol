@@ -1,0 +1,655 @@
+From 1a9cb7b3aadec65aed0804b3a306a6c448a5ac5c Mon Sep 17 00:00:00 2001
+From: jojobear13 <joseph.billo@gmail.com>
+Date: Wed, 22 Jul 2020 01:50:16 -0500
+Subject: [PATCH] battle oam data updated for GBC
+
+---
+ engine/battle/animations.asm            | 162 +++++++++++++++++++++---
+ engine/battle/core.asm                  |  79 ++----------
+ engine/battle/draw_hud_pokeball_gfx.asm |  10 +-
+ engine/battle/stats_functions.asm       |  59 +++++++++
+ main.asm                                |  14 +-
+ wram.asm                                |   6 +-
+ 6 files changed, 238 insertions(+), 92 deletions(-)
+
+diff --git a/engine/battle/animations.asm b/engine/battle/animations.asm
+index 4627a9deb..7d528b7b5 100755
+--- a/engine/battle/animations.asm
++++ b/engine/battle/animations.asm
+@@ -1,5 +1,6 @@
+ ; Draws a "frame block". Frame blocks are blocks of tiles that are put
+ ; together to form frames in battle animations.
++;gbcnote - oam updates from yellow version
+ DrawFrameBlock:
+ 	ld l, c
+ 	ld h, b
+@@ -15,6 +16,8 @@ DrawFrameBlock:
+ 	ld a, [wFBTileCounter]
+ 	inc a
+ 	ld [wFBTileCounter], a
++	ld a, $2
++	ld [wdeed], a
+ 	ld a, [wSubAnimTransform]
+ 	dec a
+ 	jr z, .flipHorizontalAndVertical   ; 1
+@@ -46,6 +49,12 @@ DrawFrameBlock:
+ .finishCopying ; finish copying values to OAM (when [wSubAnimTransform] not 1 or 2)
+ 	add [hl] ; X offset
+ 	ld [de], a ; store X
++	cp 88
++	jr c, .asm_78056
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_78056
+ 	inc hl
+ 	inc de
+ 	ld a, [hli]
+@@ -53,6 +62,9 @@ DrawFrameBlock:
+ 	ld [de], a ; store tile ID
+ 	inc de
+ 	ld a, [hli]
++	ld b, a
++	ld a, [wdeed]
++	or b
+ 	ld [de], a ; store flags
+ 	inc de
+ 	jp .nextTile
+@@ -71,6 +83,12 @@ DrawFrameBlock:
+ 	ld a, 168
+ 	sub b ; flip X coordinate
+ 	ld [de], a ; store X
++	cp 88
++	jr c, .asm_78087
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_78087
+ 	inc hl
+ 	inc de
+ 	ld a, [hli]
+@@ -90,7 +108,8 @@ DrawFrameBlock:
+ 	jr z, .storeFlags1
+ 	ld b, 0
+ .storeFlags1
+-	ld a, b
++	ld a, [wdeed]
++	or b
+ 	ld [de], a
+ 	inc de
+ 	jp .nextTile
+@@ -107,6 +126,12 @@ DrawFrameBlock:
+ 	ld a, 168
+ 	sub b ; flip X coordinate
+ 	ld [de], a ; store X
++	cp 88
++	jr c, .asm_780c8
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_780c8
+ 	inc hl
+ 	inc de
+ 	ld a, [hli]
+@@ -122,6 +147,9 @@ DrawFrameBlock:
+ .disableHorizontalFlip
+ 	res 5, a
+ .storeFlags2
++	ld b, a
++	ld a, [wdeed]
++	or b
+ 	ld [de], a
+ 	inc de
+ .nextTile
+@@ -411,7 +439,7 @@ MoveAnimation:
+ 	call WaitForSoundToFinish
+ 	xor a
+ 	ld [wSubAnimSubEntryAddr], a
+-	ld [wUnusedD09B], a
++	;ld [wUnusedD09B], a
+ 	ld [wSubAnimTransform], a
+ 	dec a
+ 	ld [wAnimSoundID], a
+@@ -552,6 +580,26 @@ SetAnimationPalette:
+ 	call UpdateGBCPal_OBP1
+ 	ret
+
++Func_78e98:
++	call SaveScreenTilesToBuffer2
++	xor a
++	ld [H_AUTOBGTRANSFERENABLED], a
++	call ClearScreen
++	ld h, vBGMap0 / $100
++	call WriteLowerByteOfBGMapAndEnableBGTransfer
++	call Delay3
++	xor a
++	ld [H_AUTOBGTRANSFERENABLED], a
++	call LoadScreenTilesFromBuffer2
++	ld h, vBGMap1 / $100
++
++WriteLowerByteOfBGMapAndEnableBGTransfer:
++	ld l, vBGMap0 & $ff
++	call BattleAnimCopyTileMapToVRAM
++	ld a, $1
++	ld [H_AUTOBGTRANSFERENABLED], a
++	ret
++
+ PlaySubanimation:
+ 	ld a, [wAnimSoundID]
+ 	cp $FF
+@@ -881,13 +929,13 @@ DoBlizzardSpecialEffects:
+ ; flashes the screen at 3 points in the subanimation
+ ; unused
+ FlashScreenUnused:
+-	ld a, [wSubAnimCounter]
+-	cp 14
+-	jp z, AnimationFlashScreen
+-	cp 9
+-	jp z, AnimationFlashScreen
+-	cp 2
+-	jp z, AnimationFlashScreen
++;	ld a, [wSubAnimCounter]
++;	cp 14
++;	jp z, AnimationFlashScreen
++;	cp 9
++;	jp z, AnimationFlashScreen
++;	cp 2
++;	jp z, AnimationFlashScreen
+ 	ret
+
+ ; function to make the pokemon disappear at the beginning of the animation
+@@ -1259,12 +1307,12 @@ AnimationWaterDropletsEverywhere:
+ 	ld a, 16
+ 	ld [wBaseCoordY], a
+ 	ld a, 0
+-	ld [wUnusedD08A], a
++	;ld [wUnusedD08A], a
+ 	call _AnimationWaterDroplets
+ 	ld a, 24
+ 	ld [wBaseCoordY], a
+ 	ld a, 32
+-	ld [wUnusedD08A], a
++	;ld [wUnusedD08A], a
+ 	call _AnimationWaterDroplets
+ 	dec d
+ 	jr nz, .loop
+@@ -1273,15 +1321,30 @@ AnimationWaterDropletsEverywhere:
+ _AnimationWaterDroplets:
+ 	ld hl, wOAMBuffer
+ .loop
++	ld a, $1
++	ld [wdeed], a
+ 	ld a, [wBaseCoordY]
+ 	ld [hli], a ; Y
++	cp 40
++	jr c, .asm_792d7
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_792d7
+ 	ld a, [wBaseCoordX]
+ 	add 27
+ 	ld [wBaseCoordX], a
+ 	ld [hli], a ; X
++	cp 88
++	jr c, .asm_792ee
++	ld a, [wdeed]
++	add $2
++	and $3
++	ld [wdeed], a
++.asm_792ee
+ 	ld a, [wDropletTile]
+ 	ld [hli], a ; tile
+-	xor a
++	ld a, [wdeed]
+ 	ld [hli], a ; attribute
+ 	ld a, [wBaseCoordX]
+ 	cp 144
+@@ -1424,16 +1487,30 @@ BattleAnimWriteOAMEntry:
+ ; Y coordinate = e (increased by 8 each call, before the write to OAM)
+ ; X coordinate = [wBaseCoordX]
+ ; tile = d
+-; attributes = 0
++; attributes = variable (dependant on coords)
++	ld a, $1
++	ld [wdeed], a
+ 	ld a, e
+ 	add 8
+ 	ld e, a
+ 	ld [hli], a
++	cp 40
++	jr c, .asm_793d8
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_793d8
+ 	ld a, [wBaseCoordX]
+ 	ld [hli], a
++	cp 88
++	jr c, .asm_793e8
++	ld a, [wdeed]
++	add $2
++	ld [wdeed], a
++.asm_793e8
+ 	ld a, d
+ 	ld [hli], a
+-	xor a
++	ld a, [wdeed]
+ 	ld [hli], a
+ 	ret
+
+@@ -1638,6 +1715,8 @@ AnimationSpiralBallsInward:
+ 	ld a, [hl]
+ 	cp $ff
+ 	jr z, .done
++	ld a, $2
++	ld [wdeed], a
+ 	ld a, [wSpiralBallsBaseY]
+ 	add [hl]
+ 	ld [de], a ; Y
+@@ -1646,9 +1725,20 @@ AnimationSpiralBallsInward:
+ 	ld a, [wSpiralBallsBaseX]
+ 	add [hl]
+ 	ld [de], a ; X
++	cp 88
++	jr c, .asm_79524
++	ld a, $3
++	ld [wdeed], a
++.asm_79524
+ 	inc hl
+ 	inc de
+ 	inc de
++	ld a, [de]
++	and $f0
++	ld b, a
++	ld a, [wdeed]
++	or b
++	ld [de], a
+ 	inc de
+ 	dec c
+ 	jr nz, .innerLoop
+@@ -1923,7 +2013,7 @@ _AnimationSlideMonOff:
+ .playerTurn
+ 	coord hl, 0, 5
+ .next
+-	ld d, 8 ; d's value is unused
++	;ld d, 8 ; d's value is unused
+ .slideLoop ; iterates once for each time the pic slides by one tile
+ 	push hl
+ 	ld b, 7
+@@ -2767,6 +2857,8 @@ FallingObjects_UpdateOAMEntry:
+ ; movement byte.
+ 	ld hl, wOAMBuffer
+ 	add hl, de
++	ld a, $1
++	ld [wdeed], a
+ 	ld a, [hl]
+ 	inc a
+ 	inc a
+@@ -2775,6 +2867,12 @@ FallingObjects_UpdateOAMEntry:
+ 	ld a, 160 ; if Y >= 112, put it off-screen
+ .next
+ 	ld [hli], a ; Y
++	cp 40
++	jr c, .asm_79e51
++	ld a, [wdeed]
++	inc a
++	ld [wdeed], a
++.asm_79e51
+ 	ld a, [wFallingObjectMovementByte]
+ 	ld b, a
+ 	ld de, FallingObjects_DeltaXs
+@@ -2791,6 +2889,13 @@ FallingObjects_UpdateOAMEntry:
+ 	ld a, [de]
+ 	add [hl]
+ 	ld [hli], a ; X
++	cp 88
++	jr c, .asm_79e75
++	ld a, [wdeed]
++	add $2
++	and $3
++	ld [wdeed], a
++.asm_79e75
+ 	inc hl
+ 	xor a ; no horizontal flip
+ 	jr .next2
+@@ -2800,9 +2905,19 @@ FallingObjects_UpdateOAMEntry:
+ 	ld a, [hl]
+ 	sub b
+ 	ld [hli], a ; X
++	cp 88
++	jr c, .asm_79e5c
++	ld a, [wdeed]
++	add $2
++	and $3
++	ld [wdeed], a
++.asm_79e5c
+ 	inc hl
+ 	ld a, (1 << OAM_X_FLIP)
+ .next2
++	ld b, a
++	ld a, [wdeed]
++	or b
+ 	ld [hl], a ; attribute
+ 	ret
+
+@@ -2887,6 +3002,14 @@ AnimationShakeEnemyHUD:
+ 	ld hl, vBGMap1 - $20 * 7
+ 	call BattleAnimCopyTileMapToVRAM
+
++; gbcnote - from pokemon yellow: update BGMap attributes
++	ld a, [hGBC]
++	and a
++	jr z, .notGBC
++	ld d, 13
++	callba LoadBGMapAttributes
++.notGBC
++
+ ; Move the window so that the row below the enemy HUD (in BG map 0) lines up
+ ; with the top row of the window on the screen. This makes it so that the window
+ ; covers everything below the enemy HD with a copy that looks just like what
+@@ -2920,6 +3043,15 @@ AnimationShakeEnemyHUD:
+ 	ld [hWY], a
+ 	ld hl, vBGMap1
+ 	call BattleAnimCopyTileMapToVRAM
++
++; gbcnote - from yellow version: update BGMap attributes
++	ld a, [hGBC]
++	and a
++	jr z, .notGBC2
++	ld d, 11
++	callba LoadBGMapAttributes
++.notGBC2
++
+ 	xor a
+ 	ld [hWY], a
+ 	call SaveScreenTilesToBuffer1
+diff --git a/engine/battle/core.asm b/engine/battle/core.asm
+index 566a739bf..a56aff323 100755
+--- a/engine/battle/core.asm
++++ b/engine/battle/core.asm
+@@ -1082,11 +1082,11 @@ ReplaceFaintedEnemyMon:
+ 	ld hl, wEnemyHPBarColor
+ 	ld e, $30
+ 	call GetBattleHealthBarColor
+-	;ldPal a, BLACK, DARK_GRAY, LIGHT_GRAY, WHITE
+-	;ld [rOBP0], a
+-	;ld [rOBP1], a
+-	;call UpdateGBCPal_OBP0
+-	;call UpdateGBCPal_OBP1
++	ldPal a, BLACK, DARK_GRAY, LIGHT_GRAY, WHITE
++	ld [rOBP0], a
++	ld [rOBP1], a
++	call UpdateGBCPal_OBP0
++	call UpdateGBCPal_OBP1
+ 	callab DrawEnemyPokeballs
+ 	ld a, [wLinkState]
+ 	cp LINK_STATE_BATTLING
+@@ -6855,7 +6855,7 @@ LoadEnemyMonData:
+
+ ;the pkmn is out for the first time, so give it some statExp
+ 	push de	;preserve de
+-	call CalcEnemyStatEXP	;based on the enemy pkmn level, get a stat exp amount into de
++	callba CalcEnemyStatEXP	;based on the enemy pkmn level, get a stat exp amount into de
+ 	inc hl ; move hl forward one position to MSB of first stat exp
+ 	ld b, $05	;load loops into b to loop through the five stats
+ .writeStatExp_loop
+@@ -7560,8 +7560,10 @@ HandleExplodingAnimation:
+ PlayMoveAnimation:
+ 	ld [wAnimationID], a
+ 	call Delay3
+-	predef_jump MoveAnimation
+-
++	predef MoveAnimation
++	callab Func_78e98
++	ret
++
+ InitBattle:
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ 	xor a
+@@ -9555,72 +9557,13 @@ PlayBattleAnimationGotID:
+ 	push de
+ 	push bc
+ 	predef MoveAnimation
++	callab Func_78e98
+ 	pop bc
+ 	pop de
+ 	pop hl
+ 	ret
+
+
+-;joenote - this function puts statexp per enemy pkmn level into de
+-;requires a, b, de, and wCurEnemyLVL
+-CalcEnemyStatEXP:
+-	ld a, [wOptions]	;load game options
+-	bit 6, a			;check battle style
+-	jr z, .loadzero		;load zero stat exp if on shift style
+-	;This loads 648 stat exp per level. Note that 648 in hex is the two-byte $0288
+-	ld a, $02
+-	ld [H_MULTIPLICAND], a
+-	ld a, $88
+-	ld [H_MULTIPLICAND + 1], a
+-	xor a
+-	ld [H_MULTIPLICAND + 2], a
+-	ld a, [wCurEnemyLVL]
+-	ld [H_MULTIPLIER], a
+-	call Multiply
+-	ld a, [H_MULTIPLICAND]
+-	ld d, a
+-	ld a, [H_MULTIPLICAND+1]
+-	ld e, a
+-	ret
+-.loadzero
+-	xor a
+-	ld d, a
+-	ld e, a
+-	ret
+-
+-;	;Alternative algorithm: adds (12 stat exp * current level) per level.
+-;	ld a, [wCurEnemyLVL]
+-;	ld b, a	;put the enemy's level into b. it will be used as a loop counter
+-;	xor a	;make a = 0
+-;	ld d, a	;clear d (use for MSB)
+-;	ld e, a ;clear e (use for LSB)
+-;.loop
+-;	ld a, d
+-;	cp a, $FF	;see if the current value of de is 65280 or more
+-;	jr z, .skipadder
+-;	push hl
+-;	push bc
+-;	xor a
+-;	ld [H_MULTIPLICAND], a
+-;	ld a, [wCurEnemyLVL]
+-;	ld [H_MULTIPLICAND + 1], a
+-;	ld a, $C
+-;	ld [H_MULTIPLIER], a
+-;	call Multiply
+-;	ld a, e
+-;	add l
+-;	ld e, a
+-;	ld a, d
+-;	adc h
+-;	ld d, a
+-;	pop bc
+-;	pop hl
+-;.skipadder
+-;	dec b; decrement b
+-;	jr nz, .loop	;loop back if b is not zero
+-;	ret
+-
+-
+ ;joenote - function for checking and reseting the AI's already-acted bit
+ CheckandResetEnemyActedBit:
+ 	ld a, [wUnusedC000]
+diff --git a/engine/battle/draw_hud_pokeball_gfx.asm b/engine/battle/draw_hud_pokeball_gfx.asm
+index 22636e18a..0873da532 100755
+--- a/engine/battle/draw_hud_pokeball_gfx.asm
++++ b/engine/battle/draw_hud_pokeball_gfx.asm
+@@ -27,6 +27,8 @@ SetupOwnPartyPokeballs:
+ 	ld [hl], a
+ 	ld a, 8
+ 	ld [wHUDPokeballGfxOffsetX], a
++	xor a
++	ld [wdeed], a
+ 	ld hl, wOAMBuffer
+ 	jp WritePokeballOAMData
+
+@@ -41,6 +43,8 @@ SetupEnemyPartyPokeballs:
+ 	ld [hl], $20
+ 	ld a, -8
+ 	ld [wHUDPokeballGfxOffsetX], a
++	ld a, $1
++	ld [wdeed], a
+ 	ld hl, wOAMBuffer + PARTY_LENGTH * 4
+ 	jp WritePokeballOAMData
+
+@@ -104,7 +108,7 @@ WritePokeballOAMData:
+ 	ld [hli], a
+ 	ld a, [de]
+ 	ld [hli], a
+-	xor a
++	ld a, [wdeed]
+ 	ld [hli], a
+ 	ld a, [wBaseCoordX]
+ 	ld b, a
+@@ -215,6 +219,8 @@ SetupPlayerAndEnemyPokeballs:
+ 	ld [hl], $40
+ 	ld a, 8
+ 	ld [wHUDPokeballGfxOffsetX], a
++	xor a
++	ld [wdeed], a
+ 	ld hl, wOAMBuffer
+ 	call WritePokeballOAMData
+ 	ld hl, wEnemyMons
+@@ -224,6 +230,8 @@ SetupPlayerAndEnemyPokeballs:
+ 	ld a, $50
+ 	ld [hli], a
+ 	ld [hl], $68
++	ld a, $1
++	ld [wdeed], a
+ 	ld hl, wOAMBuffer + $18
+ 	jp WritePokeballOAMData
+
+diff --git a/engine/battle/stats_functions.asm b/engine/battle/stats_functions.asm
+index 10ed9ab65..ff1e21846 100755
+--- a/engine/battle/stats_functions.asm
++++ b/engine/battle/stats_functions.asm
+@@ -165,4 +165,63 @@ ReduceSpeed:
+ 	pop bc
+ 	ret
+
++;joenote - this function puts statexp per enemy pkmn level into de
++;requires a, b, de, and wCurEnemyLVL
++CalcEnemyStatEXP:
++	ld a, [wOptions]	;load game options
++	bit 6, a			;check battle style
++	jr z, .loadzero		;load zero stat exp if on shift style
++	;This loads 648 stat exp per level. Note that 648 in hex is the two-byte $0288
++	ld a, $02
++	ld [H_MULTIPLICAND], a
++	ld a, $88
++	ld [H_MULTIPLICAND + 1], a
++	xor a
++	ld [H_MULTIPLICAND + 2], a
++	ld a, [wCurEnemyLVL]
++	ld [H_MULTIPLIER], a
++	call Multiply
++	ld a, [H_MULTIPLICAND]
++	ld d, a
++	ld a, [H_MULTIPLICAND+1]
++	ld e, a
++	ret
++.loadzero
++	xor a
++	ld d, a
++	ld e, a
++	ret
++
++;	;Alternative algorithm: adds (12 stat exp * current level) per level.
++;	ld a, [wCurEnemyLVL]
++;	ld b, a	;put the enemy's level into b. it will be used as a loop counter
++;	xor a	;make a = 0
++;	ld d, a	;clear d (use for MSB)
++;	ld e, a ;clear e (use for LSB)
++;.loop
++;	ld a, d
++;	cp a, $FF	;see if the current value of de is 65280 or more
++;	jr z, .skipadder
++;	push hl
++;	push bc
++;	xor a
++;	ld [H_MULTIPLICAND], a
++;	ld a, [wCurEnemyLVL]
++;	ld [H_MULTIPLICAND + 1], a
++;	ld a, $C
++;	ld [H_MULTIPLIER], a
++;	call Multiply
++;	ld a, e
++;	add l
++;	ld e, a
++;	ld a, d
++;	adc h
++;	ld d, a
++;	pop bc
++;	pop hl
++;.skipadder
++;	dec b; decrement b
++;	jr nz, .loop	;loop back if b is not zero
++;	ret
++
+
+diff --git a/main.asm b/main.asm
+index 30f2f5191..eb0d93ab1 100755
+--- a/main.asm
++++ b/main.asm
+@@ -2085,19 +2085,12 @@ INCLUDE "engine/overworld/cut2.asm"
+
+ INCLUDE "engine/overworld/ssanne.asm"
+
+-RedFishingTilesFront: INCBIN "gfx/red_fishing_tile_front.2bpp"
+-RedFishingTilesBack:  INCBIN "gfx/red_fishing_tile_back.2bpp"
+-RedFishingTilesSide:  INCBIN "gfx/red_fishing_tile_side.2bpp"
+-RedFishingRodTiles:   INCBIN "gfx/red_fishingrod_tiles.2bpp"
+-
+ INCLUDE "data/animations.asm"
+
+ INCLUDE "engine/evolution.asm"
+
+ INCLUDE "engine/overworld/elevator.asm"
+
+-INCLUDE "engine/items/tm_prices.asm"
+-
+
+ SECTION "bank2D",ROMX,BANK[$2D]	;joenote - This is a known empty bank. Going to start moving stuff here
+
+@@ -2135,6 +2128,13 @@ RedPicFFront:: 			INCBIN "pic/trainer/red_f.pic"
+ RedFSprite:            INCBIN "gfx/sprites/redf.2bpp"
+ RedFCyclingSprite:     INCBIN "gfx/sprites/cyclingf.2bpp"
+
++RedFishingTilesFront: INCBIN "gfx/red_fishing_tile_front.2bpp"
++RedFishingTilesBack:  INCBIN "gfx/red_fishing_tile_back.2bpp"
++RedFishingTilesSide:  INCBIN "gfx/red_fishing_tile_side.2bpp"
++RedFishingRodTiles:   INCBIN "gfx/red_fishingrod_tiles.2bpp"
++
++INCLUDE "engine/items/tm_prices.asm"
++
+
+ SECTION "bank2E",ROMX,BANK[$2E]
+ ;gbcnote - This bank with hold the bg map attributes for the gameboy color among other stuff
+diff --git a/wram.asm b/wram.asm
+index 7beb9476c..84d07e236 100755
+--- a/wram.asm
++++ b/wram.asm
+@@ -3325,7 +3325,11 @@ wEXPBarBaseEXP::      ds 3
+ wEXPBarCurEXP::       ds 3
+ wEXPBarNeededEXP::    ds 3
+ wEXPBarKeepFullFlag:: ds 1
+-; deed
++
++wdeed::
++ds 1
++
++; deee
+
+
+ SECTION "Stack", WRAM0[$df00]

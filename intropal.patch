@@ -1,0 +1,156 @@
+From 29cd410b1c4bdcc317a8c26907b6ff0c619270ef Mon Sep 17 00:00:00 2001
+From: jojobear13 <joseph.billo@gmail.com>
+Date: Sat, 25 Jul 2020 00:15:46 -0500
+Subject: [PATCH] This adds mon palettes to the intro, title screen, and oak
+ speech.
+
+---
+ engine/intro.asm       | 10 ++++++++++
+ engine/oak_speech.asm  | 30 +++++++++++++++++++++++++-----
+ engine/palettes.asm    | 30 ++++++++++++++++++++++++++++++
+ engine/titlescreen.asm | 12 ++++++++++++
+ 4 files changed, 77 insertions(+), 5 deletions(-)
+
+diff --git a/engine/intro.asm b/engine/intro.asm
+index 194ae1364..528f9e27d 100755
+--- a/engine/intro.asm
++++ b/engine/intro.asm
+@@ -36,6 +36,16 @@ PlayIntroScene:
+ 	call UpdateGBCPal_OBP0
+ 	call UpdateGBCPal_OBP1
+
++IF DEF(_BLUE)
++	push de
++	ld d, CONVERT_OBP0
++	ld e, 0
++	ld a, JIGGLYPUFF
++	ld [wcf91], a
++	callba TransferMonPal ;gbcnote - jigglypuff object needs its pal in blue version
++	pop de
++ENDC
++
+ 	xor a
+ 	ld [hSCX], a
+ 	ld b, GENGAR_INTRO_TILES1
+diff --git a/engine/oak_speech.asm b/engine/oak_speech.asm
+index a307a26be..25c704d5c 100755
+--- a/engine/oak_speech.asm
++++ b/engine/oak_speech.asm
+@@ -81,7 +81,27 @@ OakSpeech:
+ 	call GetMonHeader
+ 	coord hl, 6, 4
+ 	call LoadFlippedFrontSpriteByMonIndex
+-	call MovePicLeft
++	;call MovePicLeft
++;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
++;gbcnote - Nidorino needs its pal
++	ld a, %11100100
++	ld [rBGP], a
++	call UpdateGBCPal_BGP
++
++	push af
++	push bc
++	push hl
++	push de
++	ld d, CONVERT_BGP
++	ld e, 0
++	callba TransferMonPal
++	pop de
++	pop hl
++	pop bc
++	pop af
++
++	call MovePicLeft_NoPalUpdate
++;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ 	ld hl, OakSpeechText2
+ 	call PrintText
+ 	call GBFadeOutToWhite
+@@ -215,13 +235,13 @@ IntroFadePalettes:
+ 	db %11100100
+
+ MovePicLeft:
+-	ld a, 119
+-	ld [rWX], a
+-	call DelayFrame
+-
+ 	ld a, %11100100
+ 	ld [rBGP], a
+ 	call UpdateGBCPal_BGP
++MovePicLeft_NoPalUpdate: ;gbcnote - need the option to skip updating if needed
++	ld a, 119
++	ld [rWX], a
++	call DelayFrame
+ .next
+ 	call DelayFrame
+ 	ld a, [rWX]
+diff --git a/engine/palettes.asm b/engine/palettes.asm
+index 822b8d36d..af079788d 100755
+--- a/engine/palettes.asm
++++ b/engine/palettes.asm
+@@ -1016,6 +1016,36 @@ CopySGBBorderTiles:
+ 	jr nz, .tileLoop
+ 	ret
+
++
++;gbcnote - This function loads the palette for a given pokemon index in wcf91 into a specified palette register on the GBC
++;d = CONVERT_OBP0, CONVERT_OBP1, or CONVERT_BGP
++;e = palette register # (0 to 7)
++TransferMonPal:
++	ld a, [hGBC]
++	and a
++	ret z
++	ld a, e
++	push af
++	ld a, d
++	push af
++	ld a, [wcf91]
++	call DeterminePaletteIDOutOfBattle
++	call GetGBCBasePalAddress
++	pop af
++	cp CONVERT_BGP
++	push af
++	call DMGPalToGBCPal
++	pop af
++	jr z, .do_bgp
++	pop af
++	call TransferCurOBPData
++	ret
++.do_bgp
++	pop af
++	call TransferCurBGPData
++	ret
++
++
+ INCLUDE "data/sgb_packets.asm"
+
+ INCLUDE "data/mon_palettes.asm"
+diff --git a/engine/titlescreen.asm b/engine/titlescreen.asm
+index 00b8d2ac1..715b6d721 100755
+--- a/engine/titlescreen.asm
++++ b/engine/titlescreen.asm
+@@ -141,6 +141,12 @@ ENDC
+ 	ld [rOBP0], a
+ 	call UpdateGBCPal_OBP0
+
++	push de
++	ld d, CONVERT_BGP
++	ld e, 2
++	callba TransferMonPal ;gbcnote - update the bg pal for the new title mon
++	pop de
++
+ ; make pokemon logo bounce up and down
+ 	ld bc, hSCY ; background scroll Y
+ 	ld hl, .TitleScreenPokemonLogoYScrolls
+@@ -290,6 +296,12 @@ TitleScreenPickNewMon:
+ 	ld [hl], a
+ 	call LoadTitleMonSprite
+
++	push de
++	ld d, CONVERT_BGP
++	ld e, 2
++	callba TransferMonPal ;gbcnote - update the bg pal for the new title mon
++	pop de
++
+ 	ld a, $90
+ 	ld [hWY], a
+ 	ld d, 1 ; scroll out
