@@ -1,4 +1,4 @@
-# Pokémon Red and Blue SGB Palettes and Spaceworld BackSprites
+# Pokémon Red and Blue SGB Palettes and Spaceworld Backsprites
 
 This fork of pokered is outdated, and can only be compiled with RGBDS v0.3.3. I'm only uploading this to document the changes that I made to pokered in case someone wants to update them for the current version or port them to their own older, v0.3.3 based disassembly.
 
